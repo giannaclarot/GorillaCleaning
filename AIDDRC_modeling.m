@@ -126,5 +126,4 @@ for i = 1:length(behF)
 end
 
 fprintf('\n=== DONE ===\n');
-fprintf('Ran: %d | Skipped (already processed): %d | Skipped (no tableInfo): %d\n', nRun, nSkip, nNoInfo);
 fprintf('Output CSV: %s\n\n', modelFitFile);
