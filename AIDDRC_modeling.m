@@ -1,7 +1,12 @@
 
-% Set up base paths
-homeDir = getenv('HOME');  
-CYJ_bigpath = fullfile(homeDir, "DCNL Dropbox", "Lab_Shared_Scripts", "DCNL_Members_Scripts", "Gina", "model_fitting_gorilla");
+
+% Set up base paths (portable across computers/usernames)
+P = local_paths();
+
+CYJ_bigpath = fullfile(P.dropboxRoot, ...
+    "Lab_Shared_Scripts", "DCNL_Members_Scripts", "Gina", "model_fitting_gorilla");
+
+
 % CYJ_bigpath = char(CYJ_bigpath);
 addpath(genpath(fullfile(CYJ_bigpath, "code")));
 

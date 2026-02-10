@@ -9,12 +9,17 @@
 % Keeps feat_1..feat_8 internally for feaAway + metrics, but DROPS feat_1..feat_8 in saved cleaned CSVs.
 
 clear; clc;
+P = local_paths();
+
 
 %% Inputs
-subjID = 'A-IDDRC-0'; % CHANGE FOR EACH PARTICIPANT
+subjID = 'A-IDDRC-T0'; % CHANGE FOR EACH PARTICIPANT
 
-trainCSV = fullfile('/Users/gianna/DCNL Dropbox/Vaidya Lab/Learning Mechanisms in ASD/ADULT_GORILLA/SUBJECT_DATA_RAW', subjID, [subjID '_training.csv']);
-genCSV   = fullfile('/Users/gianna/DCNL Dropbox/Vaidya Lab/Learning Mechanisms in ASD/ADULT_GORILLA/SUBJECT_DATA_RAW', subjID, [subjID '_gen.csv']);
+rawRoot = fullfile(P.dropboxRoot, "Vaidya Lab", "Learning Mechanisms in ASD", "ADULT_GORILLA", "SUBJECT_DATA_RAW");
+
+trainCSV = fullfile(rawRoot, subjID, subjID + "_training.csv");
+genCSV   = fullfile(rawRoot, subjID, subjID + "_gen.csv");
+
 
 % Must match the stimulus column name in the Gorilla export
 version_gorilla = 'Bug'; % Fish / Bug / Butterfly
@@ -27,8 +32,8 @@ leftOrder2  = ["FID","NAX","ZEB"];
 rightOrder2 = ["ORT","MIP","ULA"];
 
 %% Output
-dropboxRoot2 = '/Users/gianna/DCNL Dropbox/Lab_Shared_Scripts/DCNL_Members_Scripts/Gina';
-outDir = fullfile(dropboxRoot2, 'model_fitting_gorilla', 'data', subjID);
+ginaRoot = fullfile(P.dropboxRoot, "Lab_Shared_Scripts", "DCNL_Members_Scripts", "Gina");
+outDir   = fullfile(ginaRoot, "model_fitting_gorilla", "data", subjID);
 if ~isfolder(outDir), mkdir(outDir); end
 
 outTrain   = fullfile(outDir, [subjID '_training_clean.csv']);
