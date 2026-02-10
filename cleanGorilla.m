@@ -11,7 +11,7 @@
 clear; clc;
 
 %% Inputs
-subjID = 'A-IDDRC-T0'; % CHANGE FOR EACH PARTICIPANT
+subjID = 'A-IDDRC-0'; % CHANGE FOR EACH PARTICIPANT
 
 trainCSV = fullfile('/Users/gianna/DCNL Dropbox/Vaidya Lab/Learning Mechanisms in ASD/ADULT_GORILLA/SUBJECT_DATA_RAW', subjID, [subjID '_training.csv']);
 genCSV   = fullfile('/Users/gianna/DCNL Dropbox/Vaidya Lab/Learning Mechanisms in ASD/ADULT_GORILLA/SUBJECT_DATA_RAW', subjID, [subjID '_gen.csv']);
