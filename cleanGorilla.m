@@ -1,26 +1,23 @@
 %% cleanGorilla_singleSubject.m
-% Cleans Gorilla training + gen for one participant and saves cleaned CSVs to Dropbox (Gina model_fitting_gorilla).
+% Cleans Gorilla training + gen for one participant and saves cleaned CSVs.
 % - Training: 240 trials -> 5 blocks (48 each), prints block accuracies
-% - Gen: computes feature-away directly from raw columns feat_1..feat_8 (already in Gorilla CSV),
-%        prints accuracies by feature-away (0..8) for Gen1, Gen2, and combined
+% - Gen: computes feature-away from feat_1..feat_8, prints accuracies by feature-away (0..8)
 %
-% Outputs in workspace:
-%   T_tra, T_gen_old, T_train_clean, T_gen1, T_gen2
-%   trainACC, trainBlockACC (1x5)
-%   gen1ACC, gen2ACC, genACC
-%   gen1ACC_byAway (9x1), gen2ACC_byAway (9x1), genACC_byAway (9x1)
+% Adds:
+%   subj_response_num (numeric coded response 1/2 based on inferred button order)
+%
+% Keeps feat_1..feat_8 internally for feaAway + metrics, but DROPS feat_1..feat_8 in saved cleaned CSVs.
 
 clear; clc;
 
 %% Inputs
-subjID = 'A-IDDRC-008';%CHANGE FOR EACH PARTICIPANT
+subjID = 'A-IDDRC-T0'; % CHANGE FOR EACH PARTICIPANT
 
 trainCSV = fullfile('/Users/gianna/DCNL Dropbox/Vaidya Lab/Learning Mechanisms in ASD/ADULT_GORILLA/SUBJECT_DATA_RAW', subjID, [subjID '_training.csv']);
 genCSV   = fullfile('/Users/gianna/DCNL Dropbox/Vaidya Lab/Learning Mechanisms in ASD/ADULT_GORILLA/SUBJECT_DATA_RAW', subjID, [subjID '_gen.csv']);
 
-% Manually set the task version (must match the stimulus column name in the Gorilla export)
-% Typical: 'Fish' / 'Bug' / 'Butterfly'
-version_gorilla = 'Fish'; %CHANGE FOR EACH PARTICIPANT
+% Must match the stimulus column name in the Gorilla export
+version_gorilla = 'Bug'; % Fish / Bug / Butterfly
 
 % --- Button order coding sets ---
 leftOrder1  = ["ORT","MIP","ULA"];
@@ -29,10 +26,9 @@ rightOrder1 = ["FID","NAX","ZEB"];
 leftOrder2  = ["FID","NAX","ZEB"];
 rightOrder2 = ["ORT","MIP","ULA"];
 
-
 %% Output
-dropboxRoot2 = '/Users/gianna/DCNL Dropbox/Lab_Shared_Scripts/Gina';
-outDir = fullfile(dropboxRoot2, 'model_fitting_gorilla', 'output2', subjID);
+dropboxRoot2 = '/Users/gianna/DCNL Dropbox/Lab_Shared_Scripts/DCNL_Members_Scripts/Gina';
+outDir = fullfile(dropboxRoot2, 'model_fitting_gorilla', 'data', subjID);
 if ~isfolder(outDir), mkdir(outDir); end
 
 outTrain   = fullfile(outDir, [subjID '_training_clean.csv']);
@@ -46,8 +42,6 @@ outSummary = fullfile(outDir, [subjID '_summary_metrics.csv']);
 opts = detectImportOptions(trainCSV);
 opts = setvartype(opts,'Response','string');
 T_tra = readtable(trainCSV, opts);
-btnOrd_tra = inferButtonOrder(T_tra, leftOrder1, leftOrder2);
-
 
 % Remove non-trial rows (your original filters)
 if ismember('display', T_tra.Properties.VariableNames)
@@ -59,6 +53,8 @@ if ismember('ZoneName', T_tra.Properties.VariableNames)
     T_tra(strcmp(T_tra.ZoneName,'advancementZone'),:) = [];
 end
 
+% Infer button order AFTER cleanup
+button_order_tra = inferButtonOrder(T_tra, leftOrder1, leftOrder2);
 
 % Guardrail (as you expect)
 if height(T_tra) ~= 240
@@ -77,14 +73,14 @@ if ~ismember(version_gorilla, T_tra.Properties.VariableNames)
     error('TRAINING missing stimulus column "%s" (check version_gorilla)', version_gorilla);
 end
 
-%% --- Build TRAINING clean table (1 row per trial; pull from response_button_text rows) ---
+%% --- Build TRAINING clean table ---
 NTRIALS_TRAIN = 240;
 
 T_train_clean = table( ...
     strings(NTRIALS_TRAIN,1), ...  % stim
     strings(NTRIALS_TRAIN,1), ...  % correct_response
-    strings(NTRIALS_TRAIN,1), ...  % subj_response
-    NaN(NTRIALS_TRAIN,1),... %subj_response_num
+    strings(NTRIALS_TRAIN,1), ...  % subj_response (text)
+    NaN(NTRIALS_TRAIN,1), ...      % subj_response_num (NEW)
     NaN(NTRIALS_TRAIN,1), ...      % RT
     NaN(NTRIALS_TRAIN,1), ...      % ACC
     NaN(NTRIALS_TRAIN,1), NaN(NTRIALS_TRAIN,1), NaN(NTRIALS_TRAIN,1), NaN(NTRIALS_TRAIN,1), ...
@@ -102,7 +98,7 @@ for i = 1:NTRIALS_TRAIN
     trialT(strcmp(trialT.ZoneType,'timelimit_screen'),:) = [];
 
     % response rows only
-    respRows = trialT(strcmp(trialT.ZoneType,'response_button_text'), :);
+    respRows = trialT(strcmp(trialT.ZoneType,'response_keyboard_single'), :);
     if isempty(respRows), continue; end
 
     % Stimulus + correct response from response row
@@ -129,9 +125,10 @@ for i = 1:NTRIALS_TRAIN
 
     if numel(uResp) == 1
         T_train_clean.subj_response(i) = uResp(1);
-        T_train_clean.subj_response_num(i) = codeResponse(uResp(1), btnOrd_tra, ...
-    leftOrder1, rightOrder1, leftOrder2, rightOrder2);
 
+        % NEW numeric response
+        T_train_clean.subj_response_num(i) = codeResponse(uResp(1), button_order_tra, ...
+            leftOrder1, rightOrder1, leftOrder2, rightOrder2);
 
         % RT: first non-NaN among response rows
         rtVals = respRows.ReactionTime;
@@ -145,22 +142,22 @@ for i = 1:NTRIALS_TRAIN
     end
 end
 
-
-
-
 %% =========================
 %  Read + clean GEN (split into Gen1/Gen2)
 % =========================
 opts = detectImportOptions(genCSV);
 opts = setvartype(opts,'Response','string');
 T_gen_old = readtable(genCSV, opts);
-btnOrd_gen = inferButtonOrder(T_gen_old, leftOrder1, leftOrder2);
-if isnan(btnOrd_gen), btnOrd_gen = btnOrd_tra; end
+
 % Remove non-trial rows/screens
 T_gen_old(cellfun(@(x) ~isempty(x), regexp(T_gen_old.ScreenName,'Instructions','once')),:)     = [];
 T_gen_old(cellfun(@(x) ~isempty(x), regexp(T_gen_old.ScreenName,'FixationScreen','once')),:)  = [];
 T_gen_old(strcmp(T_gen_old.ScreenName,''),:)                                                 = [];
 T_gen_old(strcmp(T_gen_old.ZoneType,'continue_button'),:)                                    = [];
+
+% Infer button order AFTER cleanup (fallback to training if missing)
+button_order_gen = inferButtonOrder(T_gen_old, leftOrder1, leftOrder2);
+if isnan(button_order_gen), button_order_gen = button_order_tra; end
 
 % Sanity checks
 for c = 1:numel(reqCols)
@@ -178,7 +175,7 @@ if isempty(serpInd)
     error('BreakScreen not found in gen file.');
 end
 
-%% --- Build Gen1 and Gen2 tables (34 trials each; response_button_text aligned) ---
+%% --- Build Gen1 and Gen2 tables ---
 NTRIALS_GEN = 34;
 
 for j = 1:2
@@ -192,12 +189,13 @@ for j = 1:2
         strings(NTRIALS_GEN,1), ...
         strings(NTRIALS_GEN,1), ...
         strings(NTRIALS_GEN,1), ...
+        NaN(NTRIALS_GEN,1), ...      % subj_response_num (NEW)
         NaN(NTRIALS_GEN,1), ...
         NaN(NTRIALS_GEN,1), ...
         NaN(NTRIALS_GEN,1), NaN(NTRIALS_GEN,1), NaN(NTRIALS_GEN,1), NaN(NTRIALS_GEN,1), ...
         NaN(NTRIALS_GEN,1), NaN(NTRIALS_GEN,1), NaN(NTRIALS_GEN,1), NaN(NTRIALS_GEN,1), ...
         NaN(NTRIALS_GEN,1), ...
-        'VariableNames', {'stim','correct_response','subj_response','RT','ACC', ...
+        'VariableNames', {'stim','correct_response','subj_response','subj_response_num','RT','ACC', ...
                           'feat_1','feat_2','feat_3','feat_4','feat_5','feat_6','feat_7','feat_8', ...
                           'feaAway'} );
 
@@ -209,7 +207,7 @@ for j = 1:2
         trialT(strcmp(trialT.ZoneType,'timelimit_screen'),:) = [];
 
         % response rows only
-        respRows = trialT(strcmp(trialT.ZoneType,'response_button_text'), :);
+        respRows = trialT(strcmp(trialT.ZoneType,'response_keyboard_single'), :);
         if isempty(respRows), continue; end
 
         % stim + correct
@@ -236,9 +234,10 @@ for j = 1:2
 
         if numel(uResp) == 1
             new.subj_response(i) = uResp(1);
-            new.subj_response_num(i) = codeResponse(uResp(1), btnOrd_gen, ...
-    leftOrder1, rightOrder1, leftOrder2, rightOrder2);
 
+            % NEW numeric response
+            new.subj_response_num(i) = codeResponse(uResp(1), button_order_gen, ...
+                leftOrder1, rightOrder1, leftOrder2, rightOrder2);
 
             rtVals = respRows.ReactionTime;
             rtVals = rtVals(~isnan(rtVals));
@@ -258,13 +257,10 @@ for j = 1:2
 end
 
 %% =========================
-%  ACCURACY METRICS 
+%  ACCURACY METRICS
 % =========================
+accmean = @(ACC) local_accmean(ACC, 'exM');
 
-% accmean 
-accmean = @(ACC) local_accmean(ACC, 'exM'); 
-
-% validity: has response and RT not zero
 validTra = T_train_clean.subj_response ~= "" & ~ismissing(T_train_clean.subj_response) & ~isnan(T_train_clean.RT) & T_train_clean.RT ~= 0;
 vACC_tra = T_train_clean.ACC; vACC_tra(~validTra) = NaN;
 
@@ -274,7 +270,6 @@ vACC_gen1 = T_gen1.ACC; vACC_gen1(~validGen1) = NaN;
 validGen2 = T_gen2.subj_response ~= "" & ~ismissing(T_gen2.subj_response) & ~isnan(T_gen2.RT) & T_gen2.RT ~= 0;
 vACC_gen2 = T_gen2.ACC; vACC_gen2(~validGen2) = NaN;
 
-% overall
 trainACC = accmean(vACC_tra) * 100;
 gen1ACC  = accmean(vACC_gen1) * 100;
 gen2ACC  = accmean(vACC_gen2) * 100;
@@ -299,11 +294,17 @@ for k = 0:8
 end
 
 %% =========================
-%  Save cleaned CSVs
+%  Save cleaned CSVs (DROP feat_1..feat_8, keep feaAway + subj_response_num)
 % =========================
-writetable(T_train_clean, outTrain, 'FileType', 'text');
-writetable(T_gen1, outGen1, 'FileType', 'text');
-writetable(T_gen2, outGen2, 'FileType', 'text');
+dropFeat = {'feat_1','feat_2','feat_3','feat_4','feat_5','feat_6','feat_7','feat_8'};
+
+T_train_save = removevars(T_train_clean, dropFeat);
+T_gen1_save  = removevars(T_gen1, dropFeat);
+T_gen2_save  = removevars(T_gen2, dropFeat);
+
+writetable(T_train_save, outTrain, 'FileType', 'text');
+writetable(T_gen1_save,  outGen1,  'FileType', 'text');
+writetable(T_gen2_save,  outGen2,  'FileType', 'text');
 
 %% =========================
 %  Save summary metrics CSV
@@ -322,14 +323,14 @@ summary.gen1_overall = gen1ACC;
 summary.gen2_overall = gen2ACC;
 
 % gen overall by feature-away (0..8)
-summary.gen_0feat = genACC_byAway(1);
-summary.gen_1feat = genACC_byAway(2);
-summary.gen_2feat = genACC_byAway(3);
-summary.gen_3feat = genACC_byAway(4);
-summary.gen_5feat = genACC_byAway(6);
-summary.gen_6feat = genACC_byAway(7);
-summary.gen_7feat = genACC_byAway(8);
-summary.gen_8feat = genACC_byAway(9);
+summary.feat0_away = genACC_byAway(1);
+summary.feat1_away = genACC_byAway(2);
+summary.feat2_away = genACC_byAway(3);
+summary.feat3_away = genACC_byAway(4);
+summary.feat5_away = genACC_byAway(6);
+summary.feat6_away = genACC_byAway(7);
+summary.feat7_away = genACC_byAway(8);
+summary.feat8_away = genACC_byAway(9);
 
 writetable(summary, outSummary, 'FileType', 'text');
 
@@ -352,8 +353,7 @@ end
 fprintf('\nSaved cleaned CSVs:\n%s\n%s\n%s\n', outTrain, outGen1, outGen2);
 fprintf('Saved summary metrics:\n%s\n', outSummary);
 
-
-%% ========= local function =========
+%% ========= local functions =========
 function out = local_accmean(ACC, ACC_ind)
     if strcmp(ACC_ind,'inM')
         out = sum(ACC(~isnan(ACC))) / length(ACC);
@@ -362,39 +362,44 @@ function out = local_accmean(ACC, ACC_ind)
     end
 end
 
-function btnOrd = inferButtonOrder(T, leftOrder1, leftOrder2)
-% Returns 1 or 2 based on Manipulation: LabelLeft; NaN if can't infer
-btnOrd = NaN;
+function button_order = inferButtonOrder(T, leftOrder1, leftOrder2)
+% Robust: finds any column whose name contains "labelleft" (MATLAB-renamed headers are OK)
+button_order = NaN;
 
-col = 'Manipulation: LabelLeft';
-if ismember(col, T.Properties.VariableNames)
-    leftLab = upper(strtrim(string(T.(col))));
-    for i = 1:numel(leftLab)
-        lab = leftLab(i);
-        if lab == "" || ismissing(lab), continue; end
-        if any(strcmp(lab, leftOrder1))
-            btnOrd = 1; return
-        elseif any(strcmp(lab, leftOrder2))
-            btnOrd = 2; return
-        end
+vars = string(T.Properties.VariableNames);
+idx  = find(contains(lower(vars), "labelleft"), 1);
+if isempty(idx)
+    return
+end
+
+colName = vars(idx);
+leftLab = upper(strtrim(string(T.(colName))));
+
+for i = 1:numel(leftLab)
+    lab = leftLab(i);
+    if lab == "" || ismissing(lab), continue; end
+    if any(strcmp(lab, leftOrder1))
+        button_order = 1; return
+    elseif any(strcmp(lab, leftOrder2))
+        button_order = 2; return
     end
 end
 end
 
-function code = codeResponse(resp, btnOrd, leftOrder1, rightOrder1, leftOrder2, rightOrder2)
+function code = codeResponse(resp, button_order, leftOrder1, rightOrder1, leftOrder2, rightOrder2)
 % Matches your other script behavior:
 % order 1: LEFT labels -> 2, RIGHT labels -> 1
 % order 2: LEFT labels -> 2, RIGHT labels -> 1
 code = NaN;
 
 r = upper(strtrim(string(resp)));
-if isnan(btnOrd) || r == "" || ismissing(r), return; end
+if isnan(button_order) || r == "" || ismissing(r), return; end
 
-if btnOrd == 1
+if button_order == 1
     if any(strcmp(r, leftOrder1)),  code = 2;
     elseif any(strcmp(r, rightOrder1)), code = 1;
     end
-elseif btnOrd == 2
+elseif button_order == 2
     if any(strcmp(r, leftOrder2)),  code = 2;
     elseif any(strcmp(r, rightOrder2)), code = 1;
     end
